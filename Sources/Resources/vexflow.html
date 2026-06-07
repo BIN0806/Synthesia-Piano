@@ -1,0 +1,125 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <!--
+    VexFlow sheet-music host page.
+
+    To render real notation, add VexFlow (https://github.com/0xfe/vexflow) either
+    bundled locally next to this file:
+        <script src="vexflow.js"></script>
+    or via CDN (requires network + ATS exception):
+        <script src="https://cdn.jsdelivr.net/npm/vexflow/build/cjs/vexflow.js"></script>
+
+    This stub draws a simple staff line and a tracker, and exposes the bridge
+    API the Swift side calls: window.updateTracker(index) and
+    window.loadScore(noteXPositions).
+  -->
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: transparent;
+      font-family: -apple-system, sans-serif;
+      overflow: hidden;
+    }
+    #stage {
+      position: relative;
+      width: 100%;
+      height: 160px;
+    }
+    /* Five staff lines as a lightweight placeholder for rendered notation. */
+    .staff-line {
+      position: absolute;
+      left: 0;
+      width: 100%;
+      height: 1px;
+      background: rgba(0,0,0,0.35);
+    }
+    .note-head {
+      position: absolute;
+      width: 16px;
+      height: 12px;
+      border-radius: 50%;
+      background: #222;
+    }
+    /*
+      The tracker line. KEY ANTI-JITTER DETAIL:
+      We animate `transform: translateX()` with a short CSS transition. The Swift
+      bridge only ever sets the *target* X (via updateTracker); the browser
+      interpolates smoothly, so async/jittery evaluateJavaScript calls under
+      audio-engine CPU load never make the line snap or visibly lag.
+    */
+    #tracker {
+      position: absolute;
+      top: 10px;
+      left: 0;
+      width: 3px;
+      height: 140px;
+      background: #2e7dff;
+      box-shadow: 0 0 6px rgba(46,125,255,0.7);
+      transform: translateX(0px);
+      transition: transform 120ms linear;
+      will-change: transform;
+    }
+  </style>
+</head>
+<body>
+  <div id="stage">
+    <div id="tracker"></div>
+  </div>
+
+  <script>
+    // Layout config. In a real build these X positions come from VexFlow's
+    // rendered note coordinates; here we space notes evenly.
+    var NOTE_SPACING = 36;   // px between note heads
+    var LEFT_MARGIN = 24;    // px before first note
+    var noteXPositions = [];
+
+    function drawStaff() {
+      var stage = document.getElementById('stage');
+      for (var i = 0; i < 5; i++) {
+        var line = document.createElement('div');
+        line.className = 'staff-line';
+        line.style.top = (30 + i * 18) + 'px';
+        stage.appendChild(line);
+      }
+    }
+
+    // Swift -> JS: provide note count so we can place heads + compute tracker X.
+    // Pass an array of X positions, or a single integer note count.
+    window.loadScore = function (countOrPositions) {
+      var stage = document.getElementById('stage');
+      // Clear existing heads.
+      var heads = stage.querySelectorAll('.note-head');
+      heads.forEach(function (h) { h.remove(); });
+
+      noteXPositions = [];
+      var count = Array.isArray(countOrPositions) ? countOrPositions.length : countOrPositions;
+      for (var i = 0; i < count; i++) {
+        var x = Array.isArray(countOrPositions)
+          ? countOrPositions[i]
+          : LEFT_MARGIN + i * NOTE_SPACING;
+        noteXPositions.push(x);
+        var head = document.createElement('div');
+        head.className = 'note-head';
+        head.style.left = x + 'px';
+        head.style.top = (30 + (i % 5) * 18) + 'px';
+        stage.appendChild(head);
+      }
+    };
+
+    // Swift -> JS: move the tracker to the note at `index`.
+    // Only sets the target; CSS transition smooths the motion.
+    window.updateTracker = function (index) {
+      var x = (noteXPositions.length > index && index >= 0)
+        ? noteXPositions[index]
+        : (LEFT_MARGIN + index * NOTE_SPACING);
+      document.getElementById('tracker').style.transform = 'translateX(' + x + 'px)';
+    };
+
+    drawStaff();
+  </script>
+</body>
+</html>
